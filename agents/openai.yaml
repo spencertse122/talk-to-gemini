@@ -1,0 +1,6 @@
+interface:
+  display_name: "Talk to Gemini"
+  short_description: "Delegate to persistent Gemini executors in tmux"
+  default_prompt: "Use $talk-to-gemini to delegate this task to Gemini and review its results in the same conversation."
+policy:
+  allow_implicit_invocation: false

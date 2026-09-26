@@ -1,0 +1,4 @@
+.agy-delegate/
+.superpowers/
+__pycache__/
+*.pyc
