@@ -3,6 +3,7 @@
 import argparse
 from collections import deque
 import json
+import math
 import os
 from pathlib import Path
 import shlex
@@ -75,7 +76,7 @@ def launch(directory, layout):
     while time.monotonic() < deadline:
         try:
             answer = rpc(directory, {'command': 'status'})
-            if answer.get('generation') == token:
+            if answer.get('generation') == token and answer['state'] == 'idle':
                 return answer
         except (OSError, DelegateError, ValueError):
             pass
@@ -168,8 +169,8 @@ def resume(directory, layout):
 
 
 def wait_turn(directory, turn_id, timeout):
-    if timeout < 0:
-        raise DelegateError('Timeout must be nonnegative')
+    if not math.isfinite(timeout) or timeout < 0:
+        raise DelegateError('Timeout must be finite and nonnegative')
     path = turn_path(directory, turn_id).with_suffix('.json')
     deadline = time.monotonic() + timeout
     while True:

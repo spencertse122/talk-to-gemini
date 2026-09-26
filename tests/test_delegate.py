@@ -123,6 +123,38 @@ class DelegateTests(unittest.TestCase):
         self.assertEqual(self.wait('worker', 2)['conversation_id'], cid)
         self.assertEqual(json.loads(self.result('worker', 2)), ['Remember this', 'HISTORY'])
 
+    def test_resume_rejects_wrong_identity_before_accepting_new_work(self):
+        self.start(); self.wait('worker', 1)
+        self.obj('stop', 'worker')
+        (self.cwd / '.resume-wrong').touch()
+        resumed = self.call('resume', 'worker', '--layout', 'session', check=False)
+        self.assertNotEqual(resumed.returncode, 0, 'Resume must verify identity before returning ready')
+        self.assertIn('mismatch', resumed.stderr)
+        self.assertEqual(len(list((self.state / 'worker/turns').glob('*.prompt.txt'))), 1)
+
+    def test_stop_is_bounded_when_detached_descendant_keeps_pipes_open(self):
+        self.start(prompt='DETACH'); self.wait('worker', 1)
+        descendant = int((self.cwd / '.detached-pid').read_text())
+        try:
+            began = time.monotonic()
+            stopped = self.call('stop', 'worker', check=False)
+            self.assertEqual(stopped.returncode, 0, stopped.stderr)
+            self.assertLess(time.monotonic() - began, 5)
+            self.assertEqual(self.obj('status', 'worker')['state'], 'stopped')
+        finally:
+            try:
+                os.kill(descendant, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    def test_wait_rejects_nonfinite_timeouts(self):
+        self.start(); self.wait('worker', 1)
+        for value in ['nan', 'inf', '-inf']:
+            with self.subTest(value=value):
+                result = self.call('wait', 'worker', '--turn', 1,
+                                   '--timeout=' + value, check=False)
+                self.assertNotEqual(result.returncode, 0)
+
     def test_errors_are_never_success(self):
         for prompt in ['FAIL', 'CRASH', 'BAD_JSON', 'MISSING_RESPONSE', 'WRONG_ID']:
             with self.subTest(prompt=prompt):

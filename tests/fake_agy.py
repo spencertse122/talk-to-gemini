@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import time
 import uuid
 
@@ -25,6 +26,9 @@ if args.conversation and not history_file.exists():
     print('unknown conversation', file=sys.stderr)
     sys.exit(1)
 history = json.loads(history_file.read_text()) if history_file.exists() else []
+if args.conversation and Path('.resume-wrong').exists():
+    time.sleep(0.4)
+    cid = 'wrong-conversation'
 
 
 def emit(event, **payload):
@@ -47,6 +51,10 @@ for line in sys.stdin:
         time.sleep(float(prompt.split()[1]))
     if prompt == 'CRASH':
         sys.exit(9)
+    if prompt == 'DETACH':
+        descendant = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
+                                      start_new_session=True)
+        Path('.detached-pid').write_text(str(descendant.pid))
     if prompt == 'BAD_JSON':
         print('this is not JSON', flush=True)
         time.sleep(1)

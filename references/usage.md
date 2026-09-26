@@ -48,7 +48,7 @@ run `agy models`. Model and working directory are fixed for a saved executor.
 ## Receipts and exit codes
 
 Control commands print JSON. A submission receipt identifies `name`, `session_id`,
-`conversation_id` (initially null until agy identifies it), `turn_id`, `state_dir`,
+`conversation_id` (confirmed by agy's initialization event), `turn_id`, `state_dir`,
 `model`, `cwd`, and status. Wait returns the selected turn's status and the saved
 response path, never the response content or progress events. Use the state root
 and session name to address a worker; session_id identifies it in your task ledger.
@@ -97,8 +97,10 @@ Check status, then peek or stderr.log. A late wait still works because completio
 is a durable record. If the worker disappears mid-turn, status/wait records
 `INTERRUPTED`. The prompt may already have caused actions; inspect the record and
 artifacts before continuing. Resume uses the exact saved conversation ID and
-rejects a different ID reported by agy. Provider context restoration is confirmed
-when agy emits its ID; resume itself does not spend a model turn verifying history.
+rejects a different ID reported by agy before accepting a follow-up. Start/resume
+wait for the initialization event before returning ready; resume itself does not
+spend a model turn verifying history. A CLI that defers init until after input is
+incompatible and fails startup without receiving the assignment.
 
 If no conversation ID was saved, recovery cannot preserve context: choose a new
 session deliberately. If agy's stored history is missing, restore it or start a
@@ -115,7 +117,8 @@ process cannot reverse.
 
 From this repository: `python3 -m unittest discover -s tests -v` runs deterministic
 tests through real tmux with a fake agy executable. The opt-in live smoke script
-uses the existing agy login and consumes model usage; see its `--help`.
+uses the existing agy login and consumes model usage:
+`python3 tests/live_smoke.py --help`.
 
 - [Reference skill and helper](https://github.com/AI-Builder-Club/skills/tree/main/skills/open-agent-teams)
 - [agy headless protocol](https://antigravity.google/docs/cli/headless)

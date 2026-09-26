@@ -127,7 +127,8 @@ def reconcile(directory):
     try:
         with lock(directory / 'worker.lock', blocking=False):
             state = read(directory / 'state.json')
-            if state['state'] not in ('stopped', 'dead'):
+            starting = state['state'] == 'starting' and time.time() - state['started_at'] < 20
+            if state['state'] not in ('stopped', 'dead') and not starting:
                 interrupt_pending(directory, state, 'Worker exited; delivery/completion may be uncertain. No prompt was replayed.')
     except BlockingIOError:
         pass
@@ -184,6 +185,7 @@ class Worker:
         self.stopping = False
         self.active = None
         self.expected_cid = self.state.get('conversation_id')
+        self.initialized = False
 
     def persist(self):
         save(self.directory / 'state.json', self.state)
@@ -255,7 +257,12 @@ class Worker:
             if not isinstance(event, dict):
                 raise ValueError('expected an event object')
             if event.get('event') == 'init':
+                if self.initialized:
+                    raise ValueError('unexpected repeated init event')
                 self.identify(event.get('conversation_id'))
+                self.initialized = True
+                self.state['state'] = 'idle'
+                self.persist()
             elif event.get('event') == 'step_update':
                 step = event.get('step_update', {})
                 if step.get('conversation_id'):
@@ -276,6 +283,8 @@ class Worker:
             raise DelegateError(f'Invalid agy event: {error}') from error
 
     def submit(self, prompt):
+        if not self.initialized:
+            raise DelegateError('agy has not confirmed its conversation identity yet')
         if self.active is not None or self.stopping:
             raise DelegateError('Executor is busy or stopping; wait for the current turn')
         if not isinstance(prompt, str) or not prompt.strip():
@@ -333,8 +342,10 @@ class Worker:
                 self.proc.wait()
             except ProcessLookupError:
                 self.proc.wait()
-            for pipe in (self.proc.stdin, self.proc.stdout, self.proc.stderr):
-                pipe.close()
+            # A detached tool may retain pipe descriptors after agy exits. Closing
+            # buffered streams here can deadlock against a pump/delivery thread's
+            # blocking IO lock. These daemon threads and descriptors die with this
+            # one-worker process; never wait on their locks during shutdown.
         if self.active:
             self.finish('INTERRUPTED', error=reason)
         self.state['state'] = 'stopped' if self.stopping else 'dead'
@@ -369,7 +380,7 @@ class Worker:
                         env=dict(os.environ, AGY_CLI_DISABLE_AUTO_UPDATE='true'))
                     for pipe, kind in ((self.proc.stdout, 'events'), (self.proc.stderr, 'stderr')):
                         threading.Thread(target=self.pump, args=(pipe, kind), daemon=True).start()
-                    self.state['state'] = 'idle'
+                    self.state['state'] = 'starting'
                     self.persist()
                     while not self.stopping:
                         # Process a bounded batch so a noisy model cannot starve commands.

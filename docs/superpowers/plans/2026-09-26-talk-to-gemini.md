@@ -53,9 +53,9 @@ Files: SKILL.md, agents/openai.yaml, references/usage.md.
 
 - [x] Run small live Gemini conversations with corrections and remembered context.
 - [x] Exercise concurrent workers, stop/resume, and a simulated human conversation.
-- [ ] Request one independent code/skill review, then add regression tests for
+- [x] Request one independent code/skill review, then add regression tests for
   substantive findings and fix them.
-- [ ] Run the full suite, skill validator, and git diff --check; record evidence.
+- [x] Run the full suite, skill validator, and git diff --check; record evidence.
 
 ## Execution record
 
@@ -67,7 +67,23 @@ Initial tests failed because the helper did not exist. After implementation, ten
 tests passed. A slow-input regression then exposed synchronous stdin delivery
 blocking control requests; it failed before moving delivery to a dedicated thread.
 The full suite then passed 13 tests, including real tmux split/focus behavior.
-Skill validation passed. Live verification with gemini-3.8-flash-high passed six
+Skill validation passed. Live verification with gemini-3.8-flash-high passed five
 turns across two independent conversations, including correction memory after
 stop/resume and a two-turn simulated human conversation. Live records were saved
 outside the repository at /tmp/talk-to-gemini-live-phiiizyh.
+
+Independent review identified a reconciliation race during concurrent resume and
+a shutdown deadlock when detached descendants retain agy's pipes. Regression
+tests reproduced both before their fixes. Start/resume now also wait for agy's
+initialization event and verify the conversation ID before accepting work; a
+wrong-ID regression failed before the fix. Nonfinite wait timeouts are rejected.
+The final deterministic suite passed all 17 tests in 21.386 seconds. Skill
+validation, Python compilation, and git diff --check passed.
+
+A separate live coding check ran two Gemini executors in distinct directories.
+They created working Python functions, then one revised its function in the same
+conversation; Python assertions verified both the initial code and correction.
+Records are at /tmp/talk-to-gemini-coding-6lkvxc7p. After the lifecycle fixes, the
+live smoke script passed again: two concurrent conversations, a correction loop,
+a two-turn simulated human conversation, and remembered context after stop/resume
+(five turns, /tmp/talk-to-gemini-live-tfl7po78). All test workers were stopped.

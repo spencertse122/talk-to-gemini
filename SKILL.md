@@ -40,7 +40,8 @@ root and cannot be reused by `start`; resume or choose a new name.
 
 ## Keep orchestration context small
 
-`start` and `send` return immediately. `wait` returns compact status; `result`
+`start` and `send` return after acceptance without waiting for the model's answer.
+Start first waits for agy to initialize. `wait` returns compact status; `result`
 returns the full final response, with no summarization or added wrapper. Progress
 and raw events stay in tmux and on disk. Use `status` or `peek` for diagnosis.
 
